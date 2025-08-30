@@ -10,6 +10,11 @@ CHECKPOINT_DIR = "./checkpoints"  # 模型、优化器和指标的保存路径
 METRICS_FILE = f"{CHECKPOINT_DIR}/training_metrics.csv" # 训练指标文件
 TEST_RESULTS_FILE = f"{CHECKPOINT_DIR}/test_results_details.csv" # 测试结果详情文件
 EVAL_RESULTS_DETAILS_FILE = f"{CHECKPOINT_DIR}/evaluation_results_details.csv" # 评估竞技场结果详情文件
+# ============================ [ 代码修改 1/3 - 新增 ] ============================
+# [原因] 为预训练阶段的定期评估提供独立的日志文件路径。
+# [方案] 新增 PRETRAIN_EVAL_RESULTS_FILE 变量。
+PRETRAIN_EVAL_RESULTS_FILE = f"{CHECKPOINT_DIR}/pretrain_evaluation_results.csv" # 预训练评估结果详情
+# ========================= [ 修改结束 ] =========================
 BEST_MODEL_NAME = "best_model.pth"
 LATEST_MODEL_NAME = "latest_model.pth"
 PRETRAIN_CHECKPOINT_NAME = "pretrain_checkpoint.pth"
@@ -44,10 +49,11 @@ NN_CONFIG = {
     "value_hidden_dim": 128,
     "learning_rate": 1e-4,
     "weight_decay": 1e-4,
-    # ============================ [ 代码修改 1/1 - 已删除 ] ============================
-    # [原因] 引入了自适应损失平衡机制，固定的 value_loss_weight 不再需要。
-    # [方案] 删除此行。
-    # "value_loss_weight": 1.0,
+    # ============================ [ 代码修改 2/3 - 修改 ] ============================
+    # [原因] 实施了更科学的价值目标Z-Score归一化，使得P_Loss和V_Loss的量级天然对齐。
+    # [方案] 将 value_loss_coeff 从一个较大的补偿值（如100.0）调整为一个更中性的、
+    #        用于微调任务相对重要性的值。0.5是一个常见的、稳健的默认值。
+    "value_loss_coeff": 0.5,
     # ========================= [ 修改结束 ] =========================
     "warmup_steps": 1000,
     "use_mixed_precision": True
@@ -87,11 +93,17 @@ TRAIN_CONFIG = {
 # --- 7. 专家知识预训练参数 (Pre-training Config) ---
 PRETRAIN_CONFIG = {
     "num_expert_problems": 50000,
-    "pretrain_batch_size": 1024,
+    "pretrain_batch_size": 2048,
     "pretrain_epochs": 100,
     "pretrain_lr": 1e-4,
     "expert_data_save_interval": 500,
-    "pretrain_save_interval": 5
+    "pretrain_save_interval": 5,
+    # ============================ [ 代码修改 3/3 - 新增 ] ============================
+    # [原因] 实现预训练阶段的定期评估功能。
+    # [方案] 新增 pretrain_eval_interval 参数，用于控制每隔多少个epoch进行一次评估。
+    #        值为0表示禁用此功能。
+    "pretrain_eval_interval": 10  # 每10个epoch在测试集上评估一次
+    # ========================= [ 修改结束 ] =========================
 }
 
 

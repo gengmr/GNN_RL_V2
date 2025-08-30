@@ -111,13 +111,11 @@ class MCTS:
             for key in batched_states:
                 batched_states[key] = batched_states[key].to(model_device)
 
-            # ============================ [ 代码修改 ] ============================
-            # [原因] 根据“模块一”，彻底移除向状态字典注入 historical_avg_makespan 的逻辑。
-            #        模型输入已经改为使用由环境直接提供的、基于问题内蕴尺度归一化的状态。
-            # [方案] 删除所有与 historical_avg_makespan 相关的代码块。
+            # ============================ [ 代码修改 - Bug 修复 ] ============================
+            # [原因] 模型 forward() 现在返回4个值，但这里只解包了2个，导致报错。
+            # [方案] 解包所有4个返回值，并忽略在MCTS评估中不需要的后两个（log_vars）。
+            policy_logits_batch, value_batch, _, _ = self.model(batched_states)
             # ========================= [ 修改结束 ] =========================
-
-            policy_logits_batch, value_batch = self.model(batched_states)
 
             policies = F.softmax(policy_logits_batch, dim=1).cpu().numpy()
             values = value_batch.cpu().numpy().flatten()

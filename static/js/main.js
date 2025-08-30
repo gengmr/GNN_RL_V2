@@ -95,6 +95,34 @@ document.addEventListener('DOMContentLoaded', () => {
         lr: '#0dcaf0',          // Learning Rate (Info Cyan)
     };
 
+    // ============================ [ 代码修改 1/3 - 新增 ] ============================
+    // [原因] 创建一个新的绘图函数来可视化预训练阶段的评估结果。
+    // [方案] 1. 函数接收从新API获取的数据。
+    //        2. 检查数据是否有效，如果无效则清空图表。
+    //        3. 创建两个trace：一个用于模型makespan，一个用于HEFT makespan。
+    //        4. 使用不同的颜色和线型以区分。
+    //        5. 自定义布局，将X轴标题设为 'Epoch'。
+    //        6. 使用Plotly.react绘制图表。
+    const plotPretrainEvalChart = (data) => {
+        if (!data || !data.epoch || data.epoch.length === 0) {
+            Plotly.purge('pretrain_eval_chart'); // 清空图表以防显示旧数据
+            return;
+        }
+
+        const pretrainTraces = [
+            { x: data.epoch, y: data.model_makespan, mode: 'lines+markers', name: 'Pre-trained Model', line: { color: colors.primary, width: 2.5 }, marker: { size: 5 } },
+            { x: data.epoch, y: data.heft_makespan, mode: 'lines', name: 'HEFT Baseline', line: { color: colors.heft, width: 2, dash: 'dash' } }
+        ];
+
+        const layout = mergeDeep(commonLayout, {
+             xaxis: { title: { text: 'Pre-training Epoch' } },
+             yaxis: { title: { text: 'Avg. Makespan on Test Set' } }
+        });
+
+        Plotly.react('pretrain_eval_chart', pretrainTraces, layout, commonConfig);
+    };
+    // ========================= [ 修改结束 ] =========================
+
     // --- Chart Drawing Functions ---
     const plotCharts = (data) => {
         if (!data || Object.keys(data).length === 0 || !data.iteration || data.iteration.length === 0) return;
@@ -146,12 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
         Plotly.react('improvement_chart', improvementTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Improvement (%)' }, zeroline: true, zerolinewidth: 2, zerolinecolor: colors.heft } }), commonConfig);
 
-        // 5. Self-Play Raw Reward Distribution Chart
-        const rewardTraces = [
-            { x: data.iteration, y: data.reward_mean, name: 'Mean Reward', type: 'scatter', mode: 'lines', line: { color: colors.generalization, width: 2.5 } },
+        // 5. Self-Play Value Target Distribution Chart
+        const valueTargetTraces = [
+            { x: data.iteration, y: data.value_target_mean, name: 'Mean Value Target', type: 'scatter', mode: 'lines', line: { color: colors.generalization, width: 2.5 } },
             {
                 x: [...data.iteration, ...[...data.iteration].reverse()],
-                y: [...(data.reward_mean.map((m, i) => m + (data.reward_std_dev[i] || 0))), ...[...(data.reward_mean.map((m, i) => m - (data.reward_std_dev[i] || 0)))].reverse()],
+                y: [...(data.value_target_mean.map((m, i) => m + (data.value_target_std[i] || 0))), ...[...(data.value_target_mean.map((m, i) => m - (data.value_target_std[i] || 0)))].reverse()],
                 fill: 'toself',
                 fillcolor: 'rgba(111, 66, 193, 0.2)',
                 line: { color: 'transparent' },
@@ -160,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showlegend: true
             }
         ];
-        Plotly.react('reward_chart', rewardTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Raw Reward (Neg. Makespan)' } } }), commonConfig);
+        Plotly.react('value_target_chart', valueTargetTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Value Target (Pre-Normalization)' } } }), commonConfig);
     };
 
     // [Optimized] Evaluation Makespan Distribution Chart (Grouped Box Plot)
@@ -171,34 +199,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const traces = [
-            { type: 'box', name: 'Candidate Model', marker: { color: colors.primary } },
-            { type: 'box', name: 'Best Model', marker: { color: colors.value } },
-            { type: 'box', name: 'HEFT Baseline', marker: { color: colors.heft } }
+            {
+                name: 'Candidate Model',
+                y: data.candidate_makespans.flat(),
+                x: data.iterations.map((iter, i) => Array(data.candidate_makespans[i].length).fill(iter)).flat(),
+                type: 'box',
+                boxpoints: 'Outliers',
+                marker: { color: colors.primary }
+            },
+            {
+                name: 'Best Model',
+                y: data.best_model_makespans.flat(),
+                x: data.iterations.map((iter, i) => Array(data.best_model_makespans[i].length).fill(iter)).flat(),
+                type: 'box',
+                boxpoints: 'Outliers',
+                marker: { color: colors.value }
+            },
+            {
+                name: 'HEFT Baseline',
+                y: data.heft_makespans.flat(),
+                x: data.iterations.map((iter, i) => Array(data.heft_makespans[i].length).fill(iter)).flat(),
+                type: 'box',
+                boxpoints: 'Outliers',
+                marker: { color: colors.heft }
+            }
         ];
-
-        // This data transformation is key for grouped box plots
-        traces[0].x = data.iterations;
-        traces[0].y = data.candidate_makespans.flat();
-        traces[0].boxpoints = 'Outliers';
-
-        traces[1].x = data.iterations;
-        traces[1].y = data.best_model_makespans.flat();
-        traces[1].boxpoints = 'Outliers';
-
-        traces[2].x = data.iterations;
-        traces[2].y = data.heft_makespans.flat();
-        traces[2].boxpoints = 'Outliers';
-
-        // Custom transformation to create correct groups for plotly
-        const createGroupedX = (iterations, groupName) => {
-            let result = [];
-            iterations.forEach(iter => {
-                // This creates a structure like [['Iter 1', 'Cand'], ['Iter 1', 'Cand'], ...]
-                // Plotly uses this multi-level array for grouping on a categorical axis
-                result.push(Array(data.candidate_makespans[iterations.indexOf(iter)].length).fill([iter, groupName]));
-            });
-            return result.flat();
-        };
 
         const layout = mergeDeep(commonLayout, {
             yaxis: { title: { text: 'Makespan Distribution' } },
@@ -215,20 +240,29 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastDataHash = '';
     const updateDashboard = async () => {
         try {
-            const [mainResponse, evalDetailsResponse] = await Promise.all([
+            // ============================ [ 代码修改 2/3 - 修改 ] ============================
+            // [原因] 需要同时获取主训练数据、评估详情数据和新的预训练评估数据。
+            // [方案] 将新的 /pretrain_eval_data 端点添加到 Promise.all 中。
+            const [mainResponse, evalDetailsResponse, pretrainEvalResponse] = await Promise.all([
                 fetch('/data'),
-                fetch('/eval_details_data')
+                fetch('/eval_details_data'),
+                fetch('/pretrain_eval_data')
             ]);
+            // ========================= [ 修改结束 ] =========================
 
             if (!mainResponse.ok) throw new Error(`/data fetch failed: ${mainResponse.statusText}`);
             const mainDataText = await mainResponse.text();
 
-            if (mainDataText === lastDataHash) { // No changes, skip re-rendering
+            // [优化] 检查所有数据源的哈希，以减少不必要的重绘
+            const pretrainDataText = await pretrainEvalResponse.text();
+            const combinedHash = mainDataText + pretrainDataText;
+
+            if (combinedHash === lastDataHash) { // No changes, skip re-rendering
                  statusIndicator.className = 'status-indicator live';
                  statusText.textContent = `Live (No Change) | ${new Date().toLocaleTimeString()}`;
                  return;
             }
-            lastDataHash = mainDataText;
+            lastDataHash = combinedHash;
 
             const mainData = JSON.parse(mainDataText.replace(/NaN/g, 'null'));
             if (mainData.error) throw new Error(mainData.error);
@@ -238,6 +272,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const evalDetailsData = await evalDetailsResponse.json();
             if (evalDetailsData.error) throw new Error(evalDetailsData.error);
             plotEvalDetailsChart(evalDetailsData);
+
+            // ============================ [ 代码修改 3/3 - 新增 ] ============================
+            // [原因] 调用新的绘图函数来渲染预训练评估图表。
+            // [方案] 1. 检查预训练评估响应是否成功。
+            //        2. 解析JSON数据。
+            //        3. 调用 plotPretrainEvalChart 函数。
+            if (!pretrainEvalResponse.ok) throw new Error(`/pretrain_eval_data failed: ${pretrainEvalResponse.statusText}`);
+            // 使用之前已读取的 pretrainDataText 避免重复请求
+            const pretrainEvalData = JSON.parse(pretrainDataText.replace(/NaN/g, 'null'));
+            if (pretrainEvalData.error) throw new Error(pretrainEvalData.error);
+            plotPretrainEvalChart(pretrainEvalData);
+            // ========================= [ 修改结束 ] =========================
 
             statusIndicator.className = 'status-indicator live';
             statusText.textContent = `Live | Last update: ${new Date().toLocaleTimeString()}`;

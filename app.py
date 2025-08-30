@@ -3,6 +3,7 @@
 import pandas as pd
 from flask import Flask, render_template, jsonify
 import numpy as np
+import os
 
 # 初始化 Flask 应用
 app = Flask(__name__)
@@ -11,6 +12,11 @@ app = Flask(__name__)
 # 确保这个路径与您的训练脚本保存文件的位置一致
 METRICS_FILE_PATH = "./checkpoints/training_metrics.csv"
 EVAL_DETAILS_FILE_PATH = "./checkpoints/evaluation_results_details.csv"
+# ============================ [ 代码修改 1/3 - 新增 ] ============================
+# [原因] 为预训练评估结果提供文件路径。
+# [方案] 从 config 模块导入路径，或直接定义。这里直接定义以保持app.py的独立性。
+PRETRAIN_EVAL_FILE_PATH = "./checkpoints/pretrain_evaluation_results.csv"
+# ========================= [ 修改结束 ] =========================
 
 
 @app.route('/')
@@ -99,6 +105,39 @@ def get_eval_details_data():
     except Exception as e:
         print(f"An error occurred while reading the evaluation details file: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# ============================ [ 代码修改 2/3 - 新增 ] ============================
+# [原因] 创建一个API端点以服务于预训练阶段的评估数据。
+# [方案] 1. 定义新路由 /pretrain_eval_data。
+#        2. 检查文件是否存在且不为空。
+#        3. 使用pandas读取CSV文件。
+#        4. 按 'epoch' 分组，并计算每个epoch的模型和HEFT的平均makespan。
+#        5. 将聚合后的数据（epoch列表，model makespan列表，heft makespan列表）格式化为JSON并返回。
+@app.route('/pretrain_eval_data')
+def get_pretrain_eval_data():
+    """提供预训练评估数据的API端点。"""
+    try:
+        if not os.path.exists(PRETRAIN_EVAL_FILE_PATH) or os.path.getsize(PRETRAIN_EVAL_FILE_PATH) == 0:
+            return jsonify({})
+
+        df = pd.read_csv(PRETRAIN_EVAL_FILE_PATH)
+        # 按epoch分组，计算每个epoch的平均makespan
+        grouped = df.groupby('epoch').agg(
+            model_makespan=('model_makespan', 'mean'),
+            heft_makespan=('heft_makespan', 'mean')
+        ).reset_index()
+
+        data = grouped.to_dict(orient='list')
+        return jsonify(data)
+
+    except FileNotFoundError:
+        print(f"Warning: Pre-train evaluation file not found at '{PRETRAIN_EVAL_FILE_PATH}'")
+        return jsonify({})
+    except Exception as e:
+        print(f"An error occurred while reading the pre-train evaluation file: {e}")
+        return jsonify({"error": str(e)}), 500
+# ========================= [ 修改结束 ] =========================
 
 
 if __name__ == '__main__':

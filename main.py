@@ -27,11 +27,7 @@ from mcts import MCTS
 from replay_buffer import ReplayBuffer
 from trainer import Trainer, play_game, MockTrainer
 import expert_data_generator
-# ============================ [ 代码修改 1/3 ] ============================
-# [原因] 需要HEFT调度器来计算价值目标所依赖的基准完工时间。
-# [方案] 导入HEFTScheduler。
 from baseline_models import HEFTScheduler
-# ========================= [ 修改结束 ] =========================
 
 
 def run_self_play_game(args_bundle):
@@ -59,11 +55,27 @@ def run_self_play_game(args_bundle):
         problem=problem,
         is_self_play=True
     )
-    # ============================ [ 代码修改 2/3 ] ============================
-    # [原因] 根据“模块二”，为了计算新的价值目标，父进程需要知道每个游戏
-    #        所使用的具体问题实例 (problem)。
-    # [方案] 修改函数返回值，将生成的 problem 对象一并返回。
-    return game_history, final_makespan, problem
+    # ============================ [ 代码修改 1/2 - 返回值修改 ] ============================
+    # [原因] 为了计算价值目标统计数据，主进程需要知道每次自对弈生成的原始价值目标。
+    # [方案] 计算`target_value`并将其作为函数返回值，随游戏历史一同返回。
+    heft_solver = HEFTScheduler()
+    makespan_RL = final_makespan
+    makespan_HEFT = heft_solver.schedule(problem)
+
+    if makespan_HEFT > 0:
+        performance_ratio = makespan_RL / makespan_HEFT
+    else:
+        performance_ratio = 1.0 if makespan_RL == 0 else float('inf')
+
+    if performance_ratio <= 1.0:
+        expanded_score = (1.0 - performance_ratio) / (1.0 - 0.95) if 1.0 - 0.95 > 0 else 0.0
+    else:
+        expanded_score = (1.0 - performance_ratio) / (1.2 - 1.0) if 1.2 - 1.0 > 0 else 0.0
+
+    final_score = np.clip(expanded_score, -3.0, 3.0)
+    target_value = final_score
+
+    return game_history, target_value
     # ========================= [ 修改结束 ] =========================
 
 
@@ -94,44 +106,18 @@ def self_play(best_model, problem_generator, replay_buffer, trainer, guidance_ep
             all_results.append(result)
             pbar.set_postfix_str(f"Collected {len(all_results)}/{num_games} results")
 
-    # ============================ [ 代码修改 3/3 ] ============================
-    # [原因] 实施“模块二”的扩展价值目标计算逻辑。
-    # [方案]
-    # 1. 实例化一个 HEFTScheduler 用于计算基准 makespan。
-    # 2. 更改 for 循环以解包新的三元组返回结果 (game_history, final_makespan, problem)。
-    # 3. 对每个游戏结果，计算 HEFT makespan。
-    # 4. 根据方案中定义的分段线性映射函数，计算新的 `target_value`。
-    # 5. 将 `(state, policy, target_value)` 推入回放池，取代旧的归一化奖励。
-    # 6. 保留 `update_reward_stats` 以继续为MCTS和日志提供原始奖励的统计信息。
-    heft_solver = HEFTScheduler()
     new_experiences = 0
-    for game_history, final_makespan, problem in all_results:
+    # ============================ [ 代码修改 2/2 - 逻辑修改 ] ============================
+    # [原因] 需要收集所有新生成的价值目标，以便计算统计数据用于监控。
+    # [方案] 1. 创建`value_targets_this_iter`列表来收集所有`target_value`。
+    #        2. 循环解包新的返回值 `(game_history, target_value)`。
+    #        3. 将`target_value`存入新列表，并将`(state, policy, target_value)`推入回放池。
+    #        4. 循环结束后，将收集到的`value_targets_this_iter`返回，供主循环记录指标。
+    value_targets_this_iter = []
+    for game_history, target_value in all_results:
         if not game_history: continue
 
-        # 步骤 1 & 2: 获取双方表现并计算原始性能比率
-        makespan_RL = final_makespan
-        makespan_HEFT = heft_solver.schedule(problem)
-
-        if makespan_HEFT > 0:
-            performance_ratio = makespan_RL / makespan_HEFT
-        else: # 避免除零错误
-            performance_ratio = 1.0 if makespan_RL == 0 else float('inf')
-
-        # 步骤 3: 平滑的非对称区间映射
-        if performance_ratio <= 1.0:
-            # 性能超越HEFT: [0.95, 1.0] -> [+1.0, 0.0]
-            expanded_score = (1.0 - performance_ratio) / (1.0 - 0.95) if 1.0 - 0.95 > 0 else 0.0
-        else:
-            # 性能落后HEFT: (1.0, 1.2] -> (0.0, -1.0]
-            expanded_score = (1.0 - performance_ratio) / (1.2 - 1.0) if 1.2 - 1.0 > 0 else 0.0
-
-        # 步骤 4: 最终非线性压缩
-        final_score = np.clip(expanded_score, -3.0, 3.0)
-        target_value = np.tanh(final_score)
-
-        # 为MCTS和日志记录更新原始奖励统计数据（此步骤保持不变）
-        raw_reward = -final_makespan
-        trainer.update_reward_stats(raw_reward)
+        value_targets_this_iter.append(target_value)
 
         # 将带有新价值目标的经验存入回放池
         for state, policy in game_history:
@@ -141,8 +127,8 @@ def self_play(best_model, problem_generator, replay_buffer, trainer, guidance_ep
 
     print(f"  [INFO] Collected {new_experiences} new experiences.")
     print(f"  [INFO] Replay Buffer size: {len(replay_buffer)} / {replay_buffer.memory.maxlen}.")
-    std_dev = math.sqrt(trainer.reward_m2 / (trainer.reward_n - 1)) if trainer.reward_n > 1 else 0
-    print(f"  [INFO] Updated reward stats: Mean={trainer.reward_mean:.1f}, StdDev={std_dev:.1f}.")
+
+    return value_targets_this_iter
 
 
 def main(args):
@@ -224,7 +210,7 @@ def main(args):
         phase_start_time = time.time()
         print("  [PHASE 1/4] Self-Play")
         print("  " + "-" * 21)
-        self_play(best_model, problem_generator, replay_buffer, trainer, guidance_epsilon)
+        value_targets = self_play(best_model, problem_generator, replay_buffer, trainer, guidance_epsilon)
         duration = str(datetime.timedelta(seconds=int(time.time() - phase_start_time)))
         print(f"  [SUCCESS] Self-Play phase completed in {duration}.")
 
@@ -243,8 +229,8 @@ def main(args):
             'avg_heft_makespan': np.nan,
             'improvement_vs_heft': np.nan,
             'guidance_epsilon': guidance_epsilon,
-            'reward_mean': trainer.reward_mean,
-            'reward_std_dev': math.sqrt(trainer.reward_m2 / (trainer.reward_n - 1)) if trainer.reward_n > 1 else 0.0
+            'value_target_mean': np.mean(value_targets) if value_targets else np.nan,
+            'value_target_std': np.std(value_targets) if value_targets else np.nan
         })
         print(
             f"  [RESULT] Avg Total Loss: {metrics.get('avg_total_loss', 0):.4f} | Avg Policy Loss: {metrics.get('avg_policy_loss', 0):.4f} | Avg Value Loss: {metrics.get('avg_value_loss', 0):.4f}")

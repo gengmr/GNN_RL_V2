@@ -93,5 +93,5 @@ if __name__ == "__main__":
     # main()
 
     # 示例 2: 传入一个自定义的字符串作为提交信息。
-    my_commit_msg = "修改了一些实现方式，使其更加合理"
+    my_commit_msg = "版本备份-下一版本希望冻结预训练监督学习时V_loss，因为这部分无参考意义"
     main(commit_message=my_commit_msg)

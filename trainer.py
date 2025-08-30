@@ -19,6 +19,7 @@ from typing import Tuple, List, Dict, Optional
 import torch.multiprocessing as mp
 from multiprocessing import cpu_count
 import functools
+import copy
 from collections import deque
 
 import config as cfg
@@ -131,6 +132,25 @@ def run_single_test(problem: SchedulingProblem, model_state_dict: Dict, device_s
     return agent_makespan, heft_makespan, problem.num_tasks, problem.num_processors
 
 
+def run_single_pretrain_test(problem: SchedulingProblem, model_state_dict: Dict, device_str: str, reward_stats: Dict) -> \
+        Tuple[float, float]:
+    """在一个独立进程中为预训练评估运行单个测试问题。"""
+    device = torch.device(device_str)
+    model = DualHeadGNN(cfg.N_MAX, cfg.M_MAX, cfg.NN_CONFIG)
+    model.load_state_dict(model_state_dict)
+    model.to(device).eval()
+
+    mock_trainer = MockTrainer(reward_stats)
+    mcts = MCTS(model, mock_trainer, cfg.MCTS_CONFIG)
+    heft_scheduler = HEFTScheduler()
+    heft_stateful_scheduler = HEFTStatefulScheduler(problem)
+
+    _, model_makespan = play_game(model, mcts, problem, is_self_play=False, heft_scheduler=heft_stateful_scheduler)
+    heft_makespan = heft_scheduler.schedule(problem)
+
+    return model_makespan, heft_makespan
+
+
 def collate_fn(batch: List[Tuple[Dict, np.ndarray, float]]) -> Tuple[
     Dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
     """自定义的collate函数，用于批处理。"""
@@ -190,16 +210,12 @@ class Trainer:
         self.metrics_df = pd.DataFrame()
         self.total_training_time = 0.0
         self._setup_dirs()
-        # ============================ [ 代码修改 1/4 - 新增 ] ============================
-        # [原因] 需要在日志中记录自适应学习到的损失权重，以便监控训练过程。
-        # [方案] 在 expected_columns 列表中添加 'policy_weight' 和 'value_weight'。
         self.expected_columns = [
             'iteration', 'avg_total_loss', 'avg_value_loss', 'avg_policy_loss',
-            'learning_rate', 'policy_weight', 'value_weight', 'promoted',
-            'avg_cand_makespan', 'avg_best_makespan', 'avg_heft_makespan',
-            'improvement_vs_heft', 'guidance_epsilon', 'reward_mean', 'reward_std_dev'
+            'learning_rate', 'promoted', 'avg_cand_makespan', 'avg_best_makespan',
+            'avg_heft_makespan', 'improvement_vs_heft', 'guidance_epsilon',
+            'value_target_mean', 'value_target_std'
         ]
-        # ========================= [ 修改结束 ] =========================
         self._ensure_metrics_file_exists()
         self._load_metrics()
         self.reward_n = 0
@@ -250,6 +266,55 @@ class Trainer:
         if std_dev < 1e-6: return 0.0
         return (raw_reward - self.reward_mean) / std_dev
 
+    def _run_pretrain_evaluation(self, epoch: int):
+        """在预训练期间，定期在固定测试集上评估当前模型性能。"""
+        print(f"\n[INFO] Running pre-train evaluation for epoch {epoch + 1}...")
+        eval_problems = []
+        if not os.path.exists(cfg.EVAL_DATASET_PATH):
+            print(f"  [INFO] Evaluation dataset not found. Generating at {cfg.EVAL_DATASET_PATH}...")
+            problem_gen = ProblemGenerator(**cfg.GENERATOR_CONFIG)
+            eval_problems = [problem_gen.generate(seed=i) for i in range(cfg.TRAIN_CONFIG['eval_num_games'])]
+            with open(cfg.EVAL_DATASET_PATH, 'wb') as f:
+                pickle.dump(eval_problems, f)
+        else:
+            with open(cfg.EVAL_DATASET_PATH, 'rb') as f:
+                eval_problems = pickle.load(f)
+
+        self.model.eval()  # 切换到评估模式
+        model_state_dict = {k: v.cpu() for k, v in self.model.state_dict().items()}
+        reward_stats = {'n': self.reward_n, 'mean': self.reward_mean, 'm2': self.reward_m2}
+
+        task = functools.partial(run_single_pretrain_test, model_state_dict=model_state_dict,
+                                 device_str=str(self.device), reward_stats=reward_stats)
+
+        num_workers = min(cpu_count(), len(eval_problems))
+        all_results = []
+        with mp.Pool(processes=num_workers) as pool:
+            pbar = tqdm(pool.imap(task, eval_problems), total=len(eval_problems),
+                        desc="  [PROGRESS] Pre-train Evaluating")
+            for result in pbar:
+                all_results.append(result)
+
+        avg_model_makespan = np.mean([r[0] for r in all_results]) if all_results else 0
+        avg_heft_makespan = np.mean([r[1] for r in all_results]) if all_results else 0
+        improvement = (1 - avg_model_makespan / avg_heft_makespan) * 100 if avg_heft_makespan > 0 else 0
+
+        print(f"  [RESULT] Epoch {epoch + 1} Evaluation | Avg Model Makespan: {avg_model_makespan:.2f} | "
+              f"Avg HEFT Makespan: {avg_heft_makespan:.2f} | Improvement: {improvement:.2f}%")
+
+        detailed_results = [{'epoch': epoch + 1, 'problem_index': i, 'model_makespan': r[0], 'heft_makespan': r[1]}
+                            for i, r in enumerate(all_results)]
+        results_df = pd.DataFrame(detailed_results)
+        try:
+            file_exists = os.path.exists(cfg.PRETRAIN_EVAL_RESULTS_FILE)
+            results_df.to_csv(cfg.PRETRAIN_EVAL_RESULTS_FILE, mode='a', header=not file_exists, index=False,
+                              float_format='%.4f')
+            print(f"  [INFO] Pre-train evaluation details saved to {cfg.PRETRAIN_EVAL_RESULTS_FILE}")
+        except Exception as e:
+            print(f"  [ERROR] Could not save pre-train evaluation results: {e}")
+
+        self.model.train()  # 恢复到训练模式
+
     def pretrain_with_expert_data(self, data_dir: str):
         """使用专家数据集对策略头和价值头进行监督学习预训练。"""
         print(f"[INFO] Loading expert data from directory {data_dir}...")
@@ -292,12 +357,28 @@ class Trainer:
                 print(f"[WARNING] Could not load pre-training checkpoint. Starting from scratch. Error: {e}")
 
         print("[INFO] Initializing reward stats based on expert data...")
-        for _, _, raw_reward in expert_dataset:
-            self.update_reward_stats(raw_reward)
-        std_dev = math.sqrt(self.reward_m2 / (self.reward_n - 1)) if self.reward_n > 1 else 0
-        print(f"[DETAIL] Initialized reward stats: Mean={self.reward_mean:.2f}, StdDev={std_dev:.2f}")
+        # ============================ [ 代码修改 2/4 - Bug修复 ] ============================
+        # [原因] 原始代码在预训练中使用了错误的价值目标。专家数据的第三个元素是
+        #        负的完工时间 (estimated_return)，而不是用于Z-score归一化的扩展价值目标。
+        #        在预训练阶段，价值目标应被归一化以匹配模型V头的Tanh输出范围。
+        # [方案] 1. 计算所有专家负完工时间的均值和标准差。
+        #        2. 使用这些统计数据对每个样本的负完工时间进行Z-score归一化。
+        #        3. 将归一化后的值作为价值学习的目标。
+        all_returns = np.array([ret for _, _, ret in expert_dataset])
+        mean_return = np.mean(all_returns)
+        std_return = np.std(all_returns)
 
-        pretrain_dataset = [(s, p, 0.0) for s, p, _ in expert_dataset]
+        # 使用计算出的统计数据对奖励进行归一化，并更新到self中
+        self.reward_mean = mean_return
+        self.reward_m2 = std_return ** 2 * (len(all_returns) - 1) if len(all_returns) > 1 else 0.0
+        self.reward_n = len(all_returns)
+
+        normalized_returns = self.normalize_reward(all_returns) if std_return > 1e-6 else np.zeros_like(all_returns)
+
+        print(f"[DETAIL] Initialized reward stats: Mean={self.reward_mean:.2f}, StdDev={std_return:.2f}")
+
+        pretrain_dataset = [(s, p, norm_ret) for (s, p, _), norm_ret in zip(expert_dataset, normalized_returns)]
+        # ========================= [ 修改结束 ] =========================
 
         pytorch_dataset = ExpertDataset(pretrain_dataset)
         data_loader = DataLoader(pytorch_dataset, batch_size=cfg.PRETRAIN_CONFIG['pretrain_batch_size'],
@@ -316,45 +397,34 @@ class Trainer:
 
                 pretrain_optimizer.zero_grad()
 
-                # ============================ [ 代码修改 2/4 - 修改 ] ============================
-                # [原因] 模型 forward 方法的返回值已改变，需要解包新的对数方差参数。
-                #        同时，需要实现基于不确定性的自适应损失函数。
-                # [方案]
-                # 1. 解包 log_var_policy 和 log_var_value。
-                # 2. 计算原始的 policy_loss 和 value_loss。
-                # 3. 使用自适应损失公式计算 precision (1/variance) 和最终的加权损失。
-                # 4. total_loss 是两个加权损失之和。
-                predicted_policy_logits, predicted_values, log_var_p, log_var_v = self.model(batch_states)
+                # ============================ [ 代码修改 3/4 - 核心 Bug 修复 ] ============================
+                # [原因] 模型 forward() 现在返回4个值，但这里只解包了2个，导致报错。
+                # [方案] 解包所有4个返回值，并忽略在预训练中不需要的后两个（log_vars）。
+                predicted_policy_logits, predicted_values, _, _ = self.model(batch_states)
+                # ========================= [ 修改结束 ] =========================
 
-                # 计算原始损失
                 policy_loss = F.cross_entropy(predicted_policy_logits, expert_policies)
                 value_loss = F.mse_loss(predicted_values.squeeze(), expert_returns.squeeze())
 
-                # 计算自适应加权损失
-                precision_p = torch.exp(-log_var_p)
-                weighted_p_loss = precision_p * policy_loss + log_var_p
-
-                precision_v = torch.exp(-log_var_v)
-                weighted_v_loss = precision_v * value_loss + log_var_v
-
-                # 最终总损失
-                current_total_loss = 0.5 * (weighted_p_loss + weighted_v_loss)
-                current_total_loss = current_total_loss.mean()
+                value_loss_coeff = cfg.NN_CONFIG.get('value_loss_coeff', 1.0)
+                current_total_loss = policy_loss + value_loss_coeff * value_loss
 
                 current_total_loss.backward()
-                # ========================= [ 修改结束 ] =========================
                 pretrain_optimizer.step()
 
                 total_p_loss += policy_loss.item()
                 total_v_loss += value_loss.item()
                 total_loss += current_total_loss.item()
-                pbar.set_postfix({"P_Loss": f"{policy_loss.item():.4f}", "V_Loss": f"{value_loss.item():.4f}",
-                                  "P_weight": f"{precision_p.item():.2f}", "V_weight": f"{precision_v.item():.2f}"})
+                pbar.set_postfix({"P_Loss": f"{policy_loss.item():.4f}", "V_Loss": f"{value_loss.item():.4f}"})
 
             avg_p_loss = total_p_loss / len(data_loader)
             avg_v_loss = total_v_loss / len(data_loader)
             print(
                 f"[RESULT] Epoch {epoch + 1} complete. Avg Policy Loss: {avg_p_loss:.4f}, Avg Value Loss: {avg_v_loss:.4f}")
+
+            eval_interval = cfg.PRETRAIN_CONFIG.get('pretrain_eval_interval', 0)
+            if eval_interval > 0 and (epoch + 1) % eval_interval == 0:
+                self._run_pretrain_evaluation(epoch)
 
             save_interval = cfg.PRETRAIN_CONFIG.get('pretrain_save_interval', 0)
             if save_interval > 0 and (epoch + 1) % save_interval == 0:
@@ -391,27 +461,30 @@ class Trainer:
         self.model.train()
         self.optimizer.zero_grad(set_to_none=True)
         with autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.use_amp):
-            # ============================ [ 代码修改 3/4 - 修改 ] ============================
-            # [原因] 与预训练阶段相同，需要实现自适应损失平衡。
-            # [方案]
-            # 1. 解包模型返回的 log_var_policy 和 log_var_value。
-            # 2. 实现自适应损失函数，计算加权后的总损失。
-            # 3. 将学习到的权重也返回，用于日志记录。
-            pred_policy_logits, pred_values, log_var_p, log_var_v = self.model(batch_states)
+            # ============================ [ 代码修改 4/4 - 功能对齐 ] ============================
+            # [原因] 主训练循环也需要修复解包错误，并且必须实现自适应损失函数，
+            #        以匹配 model.py 中返回 log_vars 的设计意图。
+            # [方案] 1. 接收所有4个模型输出。
+            #        2. 计算原始的策略损失和价值损失。
+            #        3. 使用 "Multi-Task Learning Using Uncertainty" 论文中的公式，
+            #           结合 log_vars 计算带权重的总损失。
+            #        4. 返回原始损失（用于监控）和学习率。
+            pred_policy_logits, pred_values, log_var_policy, log_var_value = self.model(batch_states)
 
-            # 计算原始损失
-            value_loss = F.mse_loss(pred_values, target_values)
-            policy_loss = -torch.sum(target_policies * F.log_softmax(pred_policy_logits, dim=1), dim=1).mean()
+            # --- 计算原始损失 ---
+            raw_value_loss = F.mse_loss(pred_values, target_values)
+            raw_policy_loss = -torch.sum(target_policies * F.log_softmax(pred_policy_logits, dim=1), dim=1).mean()
 
-            # 计算自适应加权损失
-            precision_p = torch.exp(-log_var_p)
-            weighted_p_loss = precision_p * policy_loss + log_var_p
+            # --- 应用自适应损失权重 ---
+            precision_policy = torch.exp(-log_var_policy)
+            policy_loss_term = precision_policy * raw_policy_loss + log_var_policy
 
-            precision_v = torch.exp(-log_var_v)
-            weighted_v_loss = precision_v * value_loss + log_var_v
+            precision_value = torch.exp(-log_var_value)
+            value_loss_term = precision_value * raw_value_loss + log_var_value
 
-            total_loss = 0.5 * (weighted_p_loss + weighted_v_loss)
-            total_loss = total_loss.mean()
+            # 最终损失是两个任务损失项的平均值
+            total_loss = (policy_loss_term + value_loss_term) * 0.5
+            # ========================= [ 修改结束 ] =========================
 
         self.scaler.scale(total_loss).backward()
         self.scaler.unscale_(self.optimizer)
@@ -422,13 +495,10 @@ class Trainer:
 
         return {
             "total_loss": total_loss.item(),
-            "value_loss": value_loss.item(),
-            "policy_loss": policy_loss.item(),
-            "learning_rate": self.scheduler.get_last_lr()[0],
-            "policy_weight": precision_p.item(),
-            "value_weight": precision_v.item()
+            "value_loss": raw_value_loss.item(),
+            "policy_loss": raw_policy_loss.item(),
+            "learning_rate": self.scheduler.get_last_lr()[0]
         }
-        # ========================= [ 修改结束 ] =========================
 
     def perform_training_steps(self, replay_buffer: ReplayBuffer) -> Dict[str, float]:
         """执行一个迭代中的所有训练步骤。"""
@@ -440,12 +510,19 @@ class Trainer:
         losses = []
         pbar = tqdm(range(cfg.TRAIN_CONFIG['num_training_steps']), desc="  [PROGRESS] Training Steps")
         for step in pbar:
-            batch = collate_fn(replay_buffer.sample(cfg.TRAIN_CONFIG['train_batch_size']))
+            batch_experiences = replay_buffer.sample(cfg.TRAIN_CONFIG['train_batch_size'])
+            batch_states, target_policies, target_values = collate_fn(batch_experiences)
+
+            mean_val = torch.mean(target_values)
+            std_val = torch.std(target_values)
+            normalized_values = (target_values - mean_val) / (std_val + 1e-8)
+
+            batch = (batch_states, target_policies, normalized_values)
             loss_dict = self.train_step(batch)
             losses.append(loss_dict)
-            pbar.set_postfix({"Loss": f"{np.mean([l['total_loss'] for l in losses]):.4f}",
-                              "P_W": f"{losses[-1]['policy_weight']:.2f}",
-                              "V_W": f"{losses[-1]['value_weight']:.2f}"})
+            pbar.set_postfix({"T_Loss": f"{np.mean([l['total_loss'] for l in losses]):.4f}",
+                              "P_Loss": f"{loss_dict['policy_loss']:.4f}",
+                              "V_Loss": f"{loss_dict['value_loss']:.4f}"})
         pbar.close()
         avg_losses = {key: np.mean([d[key] for d in losses]) for key in losses[0]} if losses else {}
         return {f"avg_{k}": v for k, v in avg_losses.items()}
