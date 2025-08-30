@@ -1,0 +1,108 @@
+<!-- FILE: templates/index.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Training Dashboard | AlphaGo Zero Scheduler</title>
+    <!-- Plotly.js Charting Library -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Google Fonts for professional typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>RL Scheduler</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#core-training" class="nav-item active">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                    <span>Core Dynamics</span>
+                </a>
+                <a href="#performance-evolution" class="nav-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                    <span>Performance</span>
+                </a>
+                 <a href="#expert-guidance" class="nav-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <span>Expert Guidance</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="main-header">
+                <h1>Training Performance Monitor</h1>
+                <div class="status-indicator-container">
+                    <div id="status-indicator" class="status-indicator stale" title="Waiting for data..."></div>
+                    <span id="status-text">Connecting...</span>
+                </div>
+            </header>
+
+            <!-- Section 1: Core Training Dynamics -->
+            <section id="core-training" class="charts-section">
+                <h2 class="section-title">Core Training Dynamics</h2>
+                <div class="charts-grid-2-col">
+                    <div class="chart-container" data-chart-id="loss_chart">
+                        <h3 class="chart-title">Training Loss (Total, Value, Policy)</h3>
+                        <div id="loss_chart" class="chart-placeholder"></div>
+                    </div>
+                    <div class="chart-container" data-chart-id="lr_guidance_chart">
+                        <h3 class="chart-title">Learning Rate & Guidance Epsilon</h3>
+                        <div id="lr_guidance_chart" class="chart-placeholder"></div>
+                    </div>
+                </div>
+            </section>
+
+             <!-- Section 2: Performance Evolution -->
+            <section id="performance-evolution" class="charts-section">
+                <h2 class="section-title">Agent Performance Evolution</h2>
+                <div class="charts-grid-1-col">
+                    <div class="chart-container" data-chart-id="evaluation_chart">
+                        <h3 class="chart-title">Evaluation Arena (vs. Best Model & HEFT Baseline)</h3>
+                        <div id="evaluation_chart" class="chart-placeholder"></div>
+                    </div>
+                     <div class="chart-container" data-chart-id="evaluation_details_chart">
+                        <h3 class="chart-title">Evaluation Makespan Distribution (Last 10 Evals)</h3>
+                        <div id="evaluation_details_chart" class="chart-placeholder"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3: Expert Knowledge & Self-Play -->
+            <section id="expert-guidance" class="charts-section">
+                <h2 class="section-title">Expert Guidance & Self-Play Analysis</h2>
+                <div class="charts-grid-2-col">
+                    <div class="chart-container" data-chart-id="improvement_chart">
+                        <h3 class="chart-title">Improvement vs. HEFT Baseline</h3>
+                        <div id="improvement_chart" class="chart-placeholder"></div>
+                    </div>
+                    <div class="chart-container" data-chart-id="reward_chart">
+                        <h3 class="chart-title">Self-Play Raw Reward Distribution</h3>
+                        <div id="reward_chart" class="chart-placeholder"></div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Fullscreen Modal for detailed chart view -->
+    <div id="fullscreen-modal" class="fullscreen-modal">
+        <span class="close-btn" title="Close (Esc)">&times;</span>
+        <div id="fullscreen-chart-container"></div>
+    </div>
+
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

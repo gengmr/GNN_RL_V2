@@ -1,0 +1,514 @@
+/* FILE: static/css/style.css */
+
+/*
+  Design System: "Refined Academic"
+  - Principles: Clarity, Hierarchy, Professionalism, Elegance
+  - Elements: Structured layout, controlled color palette, premium typography, subtle interactions
+*/
+:root {
+    --bg-color: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --accent-color: #0d6efd;
+    --border-color: #dee2e6;
+    --shadow-subtle: rgba(0, 0, 0, 0.05);
+    --shadow-lifted: rgba(0, 0, 0, 0.1);
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --success-color: #198754;
+    --warning-color: #ffc107;
+    --error-color: #dc3545;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.dashboard-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+    width: 260px;
+    background-color: var(--card-bg);
+    border-right: 1px solid var(--border-color);
+    padding: 2.5rem 1.25rem;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+.sidebar-header h2 {
+    font-size: 1.6rem;
+    margin-bottom: 3rem;
+    padding-left: 0.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-weight: 500;
+    transition: background-color 0.2s, color 0.2s;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+}
+
+.nav-item.active, .nav-item:hover {
+    background-color: #eef2ff;
+    color: var(--accent-color);
+}
+
+.nav-item svg {
+    margin-right: 1rem;
+    width: 22px;
+    height: 22px;
+}
+
+/* --- Main Content Area --- */
+.main-content {
+    flex-grow: 1;
+    padding: 3rem 4rem;
+    width: calc(100% - 260px);
+}
+
+.main-header {
+    margin-bottom: 3rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 2rem;
+}
+
+.main-header h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+}
+
+.status-indicator-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+    margin-top: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.status-indicator {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    transition: background-color 0.5s, box-shadow 0.5s;
+}
+
+.status-indicator.live { background-color: var(--success-color); box-shadow: 0 0 10px var(--success-color); }
+.status-indicator.stale { background-color: var(--warning-color); }
+.status-indicator.error { background-color: var(--error-color); }
+
+/* --- Chart Sections & Grid --- */
+.charts-section {
+    margin-bottom: 4rem;
+}
+
+.section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--accent-color);
+    display: inline-block;
+}
+
+.charts-grid-1-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+}
+
+.charts-grid-2-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    gap: 2.5rem;
+}
+
+.chart-container {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 2rem;
+    cursor: pointer;
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 4px 6px -1px var(--shadow-subtle);
+}
+
+.chart-container:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 10px 15px -3px var(--shadow-lifted);
+}
+
+.chart-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+.chart-placeholder {
+    height: 350px;
+}
+
+/* --- Fullscreen Modal --- */
+.fullscreen-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(248, 249, 250, 0.9);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem;
+    backdrop-filter: blur(8px);
+    cursor: zoom-out;
+}
+
+.close-btn {
+    position: absolute;
+    top: 2rem;
+    right: 3rem;
+    font-size: 3.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: transform 0.2s, color 0.2s;
+    z-index: 1001;
+}
+
+.close-btn:hover {
+    transform: scale(1.15);
+    color: var(--text-primary);
+}
+
+#fullscreen-chart-container {
+    width: 100%;
+    height: 100%;
+    max-width: 1600px;
+    max-height: 900px;
+}```
+
+#### ========================== FILE: static/js/main.js ===========================
+```javascript
+// FILE: static/js/main.js
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    const POLLING_INTERVAL = 5000;
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+
+    // [Design System] Plotly layout for a refined, elegant academic style
+    const commonLayout = {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: {
+            family: 'Inter, sans-serif',
+            size: 13,
+            color: '#212529'
+        },
+        xaxis: {
+            gridcolor: '#dee2e6',
+            linecolor: '#adb5bd',
+            title: {
+                text: 'Iteration',
+                font: { size: 14, color: '#6c757d' },
+                standoff: 20
+            },
+            zeroline: false,
+            tickfont: { color: '#6c757d' }
+        },
+        yaxis: {
+            gridcolor: '#dee2e6',
+            linecolor: '#adb5bd',
+            title: {
+                font: { size: 14, color: '#6c757d' },
+                standoff: 20
+            },
+            zeroline: false,
+            tickfont: { color: '#6c757d' }
+        },
+        legend: {
+            orientation: 'h',
+            yanchor: 'bottom',
+            y: 1.02,
+            xanchor: 'right',
+            x: 1,
+            font: { size: 13 }
+        },
+        margin: { l: 70, r: 30, b: 60, t: 30 },
+        hovermode: 'x unified',
+        hoverlabel: {
+            bgcolor: "#ffffff",
+            bordercolor: "#dee2e6",
+            font: {
+                family: 'Inter, sans-serif',
+                size: 13,
+                color: "#212529"
+            },
+            align: 'left',
+            namelength: -1
+        }
+    };
+
+    const commonConfig = {
+        responsive: true,
+        displayModeBar: false // Keep Plotly toolbar hidden for a cleaner look
+    };
+
+    const mergeDeep = (target, ...sources) => {
+        const isObject = (obj) => obj && typeof obj === 'object';
+        const output = { ...target };
+        sources.forEach(source => {
+            if (isObject(source)) {
+                Object.keys(source).forEach(key => {
+                    if (isObject(source[key])) {
+                        if (!(key in output))
+                            Object.assign(output, { [key]: source[key] });
+                        else
+                            output[key] = mergeDeep(output[key], source[key]);
+                    } else {
+                        Object.assign(output, { [key]: source[key] });
+                    }
+                });
+            }
+        });
+        return output;
+    };
+
+    // [Design System] Professional color palette
+    const colors = {
+        primary: '#0d6efd',     // Accent Blue
+        value: '#198754',       // Value/Best Model (Success Green)
+        policy: '#fd7e14',      // Policy (Vibrant Orange)
+        generalization: '#6f42c1', // Generalization (Deep Purple)
+        heft: '#6c757d',        // Baseline (Secondary Grey)
+        promotion: '#dc3545',   // Promotion (Danger Red)
+        lr: '#0dcaf0',          // Learning Rate (Info Cyan)
+    };
+
+    // --- Chart Drawing Functions ---
+    const plotCharts = (data) => {
+        if (!data || Object.keys(data).length === 0 || !data.iteration || data.iteration.length === 0) return;
+
+        // 1. Training Loss Chart
+        const lossTraces = [
+            { x: data.iteration, y: data.avg_total_loss, mode: 'lines+markers', name: 'Total Loss', line: { color: colors.primary, width: 2.5 }, marker: { size: 4 } },
+            { x: data.iteration, y: data.avg_value_loss, mode: 'lines+markers', name: 'Value Loss', line: { color: colors.value, width: 1.5, dash: 'dash' }, marker: { size: 4, symbol: 'x' } },
+            { x: data.iteration, y: data.avg_policy_loss, mode: 'lines+markers', name: 'Policy Loss', line: { color: colors.policy, width: 1.5, dash: 'dash' }, marker: { size: 4, symbol: 'cross' } }
+        ];
+        Plotly.react('loss_chart', lossTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Loss' } } }), commonConfig);
+
+        // 2. Learning Rate & Guidance Epsilon Chart
+        const lrGuidanceTraces = [
+            { x: data.iteration, y: data.learning_rate, name: 'Learning Rate', type: 'scatter', mode: 'lines', yaxis: 'y1', line: { color: colors.lr } },
+            { x: data.iteration, y: data.guidance_epsilon, name: 'Guidance ε', type: 'scatter', mode: 'lines', yaxis: 'y2', line: { color: colors.policy, dash: 'dot' } }
+        ];
+        const lrLayout = mergeDeep(commonLayout, {
+            yaxis: { title: 'Learning Rate', side: 'left' },
+            yaxis2: { title: 'Guidance Epsilon', overlaying: 'y', side: 'right', showgrid: false, range: [0, Math.max(...data.guidance_epsilon.filter(v => v !== null), 0.5)] },
+             legend: { y: 1.15 }
+        });
+        Plotly.react('lr_guidance_chart', lrGuidanceTraces, lrLayout, commonConfig);
+
+        // 3. Evaluation Arena Chart
+        const evaluationTraces = [
+            { x: data.iteration, y: data.avg_cand_makespan, mode: 'lines+markers', name: 'Candidate Model', line: { color: colors.primary }, marker: { symbol: 'circle', size: 6 } },
+            { x: data.iteration, y: data.avg_best_makespan, mode: 'lines+markers', name: 'Best Model', line: { color: colors.value }, marker: { symbol: 'diamond', size: 6 } },
+            { x: data.iteration, y: data.avg_heft_makespan, mode: 'lines+markers', name: 'HEFT Baseline', line: { color: colors.heft, dash: 'dot', width: 2 }, marker: { symbol: 'circle-open', size: 5 } }
+        ];
+        const promotedIterations = data.iteration.filter((_, i) => data.promoted && data.promoted[i] == 1);
+        if (promotedIterations.length > 0) {
+            const promotedMakespans = data.avg_cand_makespan.filter((_, i) => data.promoted && data.promoted[i] == 1);
+            evaluationTraces.push({
+                x: promotedIterations,
+                y: promotedMakespans,
+                mode: 'markers',
+                name: 'Model Promoted',
+                marker: { symbol: 'star', color: colors.promotion, size: 14, line: { color: '#ffffff', width: 1.5 } },
+                hoverinfo: 'text',
+                text: promotedIterations.map(iter => `Promoted at Iteration ${iter}`)
+            });
+        }
+        Plotly.react('evaluation_chart', evaluationTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Avg. Makespan' } } }), commonConfig);
+
+        // 4. Improvement vs HEFT Chart
+        const improvementTraces = [
+            { x: data.iteration, y: data.improvement_vs_heft, name: 'Improvement %', type: 'scatter', mode: 'lines+markers', line: { color: colors.primary, shape: 'spline' }, marker: {size: 5} }
+        ];
+        Plotly.react('improvement_chart', improvementTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Improvement (%)' }, zeroline: true, zerolinewidth: 2, zerolinecolor: colors.heft } }), commonConfig);
+
+        // 5. Self-Play Raw Reward Distribution Chart
+        const rewardTraces = [
+            { x: data.iteration, y: data.reward_mean, name: 'Mean Reward', type: 'scatter', mode: 'lines', line: { color: colors.generalization, width: 2.5 } },
+            {
+                x: [...data.iteration, ...[...data.iteration].reverse()],
+                y: [...(data.reward_mean.map((m, i) => m + (data.reward_std_dev[i] || 0))), ...[...(data.reward_mean.map((m, i) => m - (data.reward_std_dev[i] || 0)))].reverse()],
+                fill: 'toself',
+                fillcolor: 'rgba(111, 66, 193, 0.2)',
+                line: { color: 'transparent' },
+                hoverinfo: 'none',
+                name: 'Std Dev Range',
+                showlegend: true
+            }
+        ];
+        Plotly.react('reward_chart', rewardTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Raw Reward (Neg. Makespan)' } } }), commonConfig);
+
+        // 6. Generalization Performance Chart
+        const generalizationTraces = [
+            { x: data.iteration, y: data.generalization_makespan, mode: 'lines+markers', name: 'Generalization Makespan', line: { color: colors.generalization }, marker: { size: 6 } }
+        ];
+        Plotly.react('generalization_chart', generalizationTraces, mergeDeep(commonLayout, { yaxis: { title: { text: 'Makespan' } } }), commonConfig);
+    };
+
+    // [Optimized] Evaluation Makespan Distribution Chart (Grouped Box Plot)
+    const plotEvalDetailsChart = (data) => {
+        if (!data || !data.iterations || data.iterations.length === 0) {
+            Plotly.purge('evaluation_details_chart');
+            return;
+        }
+
+        const traces = [
+            { type: 'box', name: 'Candidate Model', marker: { color: colors.primary } },
+            { type: 'box', name: 'Best Model', marker: { color: colors.value } },
+            { type: 'box', name: 'HEFT Baseline', marker: { color: colors.heft } }
+        ];
+
+        // This data transformation is key for grouped box plots
+        traces[0].x = data.iterations;
+        traces[0].y = data.candidate_makespans.flat();
+        traces[0].boxpoints = 'Outliers';
+
+        traces[1].x = data.iterations;
+        traces[1].y = data.best_model_makespans.flat();
+        traces[1].boxpoints = 'Outliers';
+
+        traces[2].x = data.iterations;
+        traces[2].y = data.heft_makespans.flat();
+        traces[2].boxpoints = 'Outliers';
+
+        // Custom transformation to create correct groups for plotly
+        const createGroupedX = (iterations, groupName) => {
+            let result = [];
+            iterations.forEach(iter => {
+                // This creates a structure like [['Iter 1', 'Cand'], ['Iter 1', 'Cand'], ...]
+                // Plotly uses this multi-level array for grouping on a categorical axis
+                result.push(Array(data.candidate_makespans[iterations.indexOf(iter)].length).fill([iter, groupName]));
+            });
+            return result.flat();
+        };
+
+        const layout = mergeDeep(commonLayout, {
+            yaxis: { title: { text: 'Makespan Distribution' } },
+            xaxis: { type: 'category' },
+            boxmode: 'group',
+            legend: { y: 1.15 }
+        });
+
+        Plotly.react('evaluation_details_chart', traces, layout, commonConfig);
+    };
+
+
+    // --- Data Fetching & Dashboard Update Logic ---
+    let lastDataHash = '';
+    const updateDashboard = async () => {
+        try {
+            const [mainResponse, evalDetailsResponse] = await Promise.all([
+                fetch('/data'),
+                fetch('/eval_details_data')
+            ]);
+
+            if (!mainResponse.ok) throw new Error(`/data fetch failed: ${mainResponse.statusText}`);
+            const mainDataText = await mainResponse.text();
+
+            if (mainDataText === lastDataHash) { // No changes, skip re-rendering
+                 statusIndicator.className = 'status-indicator live';
+                 statusText.textContent = `Live (No Change) | ${new Date().toLocaleTimeString()}`;
+                 return;
+            }
+            lastDataHash = mainDataText;
+
+            const mainData = JSON.parse(mainDataText.replace(/NaN/g, 'null'));
+            if (mainData.error) throw new Error(mainData.error);
+            plotCharts(mainData);
+
+            if (!evalDetailsResponse.ok) throw new Error(`/eval_details_data failed: ${evalDetailsResponse.statusText}`);
+            const evalDetailsData = await evalDetailsResponse.json();
+            if (evalDetailsData.error) throw new Error(evalDetailsData.error);
+            plotEvalDetailsChart(evalDetailsData);
+
+            statusIndicator.className = 'status-indicator live';
+            statusText.textContent = `Live | Last update: ${new Date().toLocaleTimeString()}`;
+        } catch (error) {
+            console.error("Failed to fetch or plot data:", error);
+            statusIndicator.className = 'status-indicator error';
+            statusText.textContent = `Error: ${error.message}`;
+        }
+    };
+
+    // --- Fullscreen & Interactivity ---
+    const modal = document.getElementById('fullscreen-modal');
+    const fullscreenContainer = document.getElementById('fullscreen-chart-container');
+    const closeBtn = document.querySelector('.close-btn');
+
+    document.querySelectorAll('.chart-container').forEach(container => {
+        container.addEventListener('click', () => {
+            const chartId = container.dataset.chartId;
+            const sourceChartNode = document.getElementById(chartId);
+
+            if (sourceChartNode && sourceChartNode.data) {
+                const newLayout = JSON.parse(JSON.stringify(sourceChartNode.layout));
+                newLayout.autosize = true; // Ensure it fills the container
+                Plotly.react(fullscreenContainer, sourceChartNode.data, newLayout, commonConfig);
+                modal.style.display = 'flex';
+                // Trigger resize after modal is visible
+                setTimeout(() => Plotly.Plots.resize(fullscreenContainer), 50);
+            }
+        });
+    });
+
+    const closeModal = () => {
+        if (modal.style.display === 'flex') {
+            modal.style.display = 'none';
+            Plotly.purge(fullscreenContainer);
+        }
+    };
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeModal(); });
+    modal.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (e) => { if (e.key === "Escape") closeModal(); });
+
+    // --- Initialization & Polling ---
+    updateDashboard();
+    setInterval(updateDashboard, POLLING_INTERVAL);
+});
