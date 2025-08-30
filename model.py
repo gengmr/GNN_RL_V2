@@ -84,7 +84,8 @@ class DualHeadGNN(nn.Module):
                 embed_dim=self.embed_dim,
                 num_heads=self.num_heads,
                 ff_dim=nn_config['ff_dim'],
-                dropout=nn.config['dropout']
+                # [修正] 将 nn.config 修改为 nn_config
+                dropout=nn_config['dropout']
             ) for _ in range(nn_config['num_layers'])
         ])
 

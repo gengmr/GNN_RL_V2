@@ -76,13 +76,12 @@ TRAIN_CONFIG = {
     "train_batch_size": 256,
     "default_gpu_workers": 48,
     "num_training_steps": 100,
-    "checkpoint_interval": 5,
+    "checkpoint_interval": 2,
     "evaluation_interval": 10,
     "eval_num_games": 100,
     "eval_win_rate_threshold": 0.55,
     "self_play_parallel_workers": 0,
     "eval_parallel_workers": 0,
-    "generalization_check_interval": 10
 }
 
 # --- 7. 专家知识预训练参数 (Pre-training Config) ---
@@ -92,7 +91,7 @@ PRETRAIN_CONFIG = {
     "pretrain_epochs": 100,
     "pretrain_lr": 1e-4,
     "expert_data_save_interval": 500,
-    "pretrain_save_interval": 10
+    "pretrain_save_interval": 5
 }
 
 
