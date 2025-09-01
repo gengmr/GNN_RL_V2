@@ -1,4 +1,3 @@
-# =============================== FILE: config.py ================================
 # -*- coding: utf-8 -*-
 import torch
 import os
@@ -93,16 +92,16 @@ TRAIN_CONFIG = {
 # --- 7. 专家知识预训练参数 (Pre-training Config) ---
 PRETRAIN_CONFIG = {
     "num_expert_problems": 50000,
-    "pretrain_batch_size": 2048,
+    "pretrain_batch_size": 3000,
     "pretrain_epochs": 100,
     "pretrain_lr": 1e-4,
     "expert_data_save_interval": 500,
-    "pretrain_save_interval": 5,
+    "pretrain_save_interval": 1,
     # ============================ [ 代码修改 3/3 - 新增 ] ============================
     # [原因] 实现预训练阶段的定期评估功能。
     # [方案] 新增 pretrain_eval_interval 参数，用于控制每隔多少个epoch进行一次评估。
     #        值为0表示禁用此功能。
-    "pretrain_eval_interval": 10  # 每10个epoch在测试集上评估一次
+    "pretrain_eval_interval": 1  # 每pretrain_eval_interval个epoch在测试集上评估一次
     # ========================= [ 修改结束 ] =========================
 }
 

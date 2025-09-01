@@ -59,8 +59,8 @@ FILES_TO_INCLUDE: List[str] = [
     "baseline_models.py",
 
     # --- md文件 ---
-    # "README.md",
-    # "改进方案.md"
+    "README.md",
+    "改进方案.md"
 ]
 
 
